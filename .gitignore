@@ -216,3 +216,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Push small pickles — needed for Streamlit
+# So DON'T ignore *.pkl
+
+# Ignore large model files
+*.h5
+*.pt
+
+# Ignore data files
+data/raw/
+data/processed/
+*.csv
+*.zip
+outputs/
+.DS_Store
