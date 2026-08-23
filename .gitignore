@@ -231,4 +231,4 @@ data/processed/
 *.zip
 outputs/
 .DS_Store
-notebook/data/
+notebook/data/*.keras
