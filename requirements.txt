@@ -1,13 +1,37 @@
+# Serving + training. Pinned loosely, but note that the pickles in artifacts/
+# were written with scikit-learn 1.9 and xgboost 3.2 — unpickling under a
+# different major of either can fail.
+
+# Web app
 streamlit
+
+# Core
 pandas
 numpy
+scipy
 matplotlib
 seaborn
+Pillow
+
+# Reading the source workbook (pandas.read_excel needs this explicitly)
+openpyxl
+
+# Modelling
 scikit-learn
 xgboost
+imbalanced-learn
+statsmodels
+
+# Explainability
 shap
 lime
-imbalanced-learn
-scipy
-statsmodels
-Pillow
+
+# Notebook-only: Block 1 missingness plots, Block 5 UMAP projection
+missingno
+umap-learn
+
+# NOT listed on purpose: tensorflow, needed only by the ultrasound CNN.
+# PredictPipeline.cnn catches the ImportError and returns None, so the
+# ultrasound tab degrades to "no classification" instead of breaking. Adding it
+# here would work locally but materially increases deploy size and build time —
+# do that only if the ultrasound feature has to work in production.

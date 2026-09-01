@@ -225,10 +225,16 @@ __marimo__/
 *.pt
 
 # Ignore data files
-data/raw/
-data/processed/
 *.csv
 *.zip
 outputs/
 .DS_Store
 notebook/data/*.keras
+CLAUDE.md
+
+# Retraining output — src/pipeline/train_pipeline.py writes here by default so
+# it never clobbers the shipped pickles in artifacts/. Regenerable, not shipped.
+artifacts/retrained/
+
+# Timestamped run logs from src/logger.py
+logs/
