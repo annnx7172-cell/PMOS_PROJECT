@@ -19,7 +19,13 @@ import pandas as pd
 import streamlit as st
 
 from src.pipeline.predict_pipeline import PatientData, PredictPipeline
-from src.recommendations import get_recommendations, overall_urgency
+from src.recommendations import (
+    DAILY_FOUNDATION,
+    PLAN_FOOTER,
+    PLAN_INTRO,
+    get_recommendations,
+    overall_urgency,
+)
 from src.utils import COLOR_HIGH, COLOR_LOW, COLOR_MODERATE, RISK_HIGH, RISK_MODERATE
 
 warnings.filterwarnings('ignore')
@@ -277,11 +283,16 @@ elif page == 'Risk Dashboard':
 
 # ══ PAGE 4 ══
 elif page == 'Recommendations':
-    st.title('Personalised Recommendations')
-    st.caption('Based on your risk profile, here are practical steps commonly '
-               'recommended for people with similar risk patterns.')
-    st.markdown('---')
+    st.title('Your Personalised PMOS Management Plan')
+    st.info(PLAN_INTRO)
     require_input()
+
+    st.markdown('## Your Daily Foundation')
+    st.markdown('These habits support metabolic, hormonal and overall wellbeing '
+                'across all risk domains:')
+    for item in DAILY_FOUNDATION:
+        st.markdown(f'- {item}')
+    st.markdown('---')
 
     headline, headline_color, headline_sub = overall_urgency(st.session_state.risks)
     st.markdown(
@@ -293,8 +304,6 @@ elif page == 'Recommendations':
 
     sections = [
         ('driver', 'What may be driving this?'),
-        ('pathway', 'What this means'),
-        ('checks', 'What to check with your doctor'),
         ('actions', 'What you can do now'),
     ]
     for rec in get_recommendations(st.session_state.risks):
@@ -319,8 +328,9 @@ elif page == 'Recommendations':
             if rec.get('goal'):
                 st.markdown(f'**Main goal:** {rec["goal"]}')
         st.markdown('')
-    st.caption('These recommendations do not replace professional medical advice. '
-               'Always consult a qualified healthcare provider.')
+
+    st.divider()
+    st.caption(PLAN_FOOTER)
 
 # ══ PAGE 5 ══
 elif page == 'SHAP Explanation':
