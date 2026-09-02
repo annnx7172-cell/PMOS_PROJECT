@@ -1,127 +1,164 @@
 # PMOS Intelligence Platform
 
-A PCOS/PMOS screening platform: a Streamlit front end over a set of trained
-models that estimate diagnosis probability, stratify four long-term risk
-dimensions, explain the diagnosis with SHAP, and turn the risk profile into
-plain-language guidance.
+*What if a screening tool could tell you not just "yes" or "no," but which parts of your health actually need attention — and be upfront about how sure it is?*
 
-> **Not a medical device.** Every number this platform produces is a
-> model-based estimate on a 541-patient research dataset. The risk labels in
-> particular are derived from rules, not observed outcomes. Nothing here is a
-> diagnosis or a substitute for a clinician.
+**Try it live:** [pmosproject-fskjdpg8r9nidgzocyzhmu.streamlit.app](https://pmosproject-fskjdpg8r9nidgzocyzhmu.streamlit.app/)
+**Code:** [github.com/annnx7172-cell/PMOS_PROJECT](https://github.com/annnx7172-cell/PMOS_PROJECT)
 
-## Layout
+> Not a medical device. Every number this platform produces is a model-based estimate on a 541-patient research dataset, not a diagnosis. Please don't use it to make real medical decisions.
 
-```
-PMOS_PROJECT/
-├── artifacts/                  # cleaned dataset, scaler, feature lists, models
-│   └── retrained/              # output of a local retrain — gitignored
-├── notebook/
-│   ├── data/                   # raw Excel + ultrasound image set
-│   └── Block*.ipynb            # exploratory + the blocks not yet ported to src/
-├── src/
-│   ├── components/
-│   │   ├── data_ingestion.py       # Excel -> cleaned CSV
-│   │   ├── data_transformation.py  # feature selection, split, SMOTETomek, scaler
-│   │   ├── model_trainer.py        # LR / RF / XGB / SVM / voting ensemble
-│   │   └── risk_scoring.py         # 4 rule-derived labels -> per-dimension XGBoost
-│   ├── pipeline/
-│   │   ├── train_pipeline.py       # chains the three components
-│   │   └── predict_pipeline.py     # serving-side inference, no UI imports
-│   ├── exception.py            # errors that report file + line
-│   ├── logger.py               # timestamped run logs under logs/
-│   ├── recommendations.py      # recommendation copy, keyed by dimension + band
-│   └── utils.py                # paths, pickle IO, risk banding, scoring
-├── app.py                      # Streamlit UI — presentation only
-├── requirements.txt
-└── README.md
-```
+## PCOS, PMOS — what's going on with the name?
 
-The split that matters: `app.py` contains no model code, and `src/pipeline/
-predict_pipeline.py` contains no Streamlit. A different front end would import
-the same pipeline unchanged.
+You'll see both names in this repo. PCOS (Polycystic Ovary Syndrome) is the name almost everyone knows. PMOS — Polyendocrine Metabolic Ovarian Syndrome — is the name this project builds toward, reflecting a 2026 renaming discussion that better captures what the condition actually is: not just an ovary problem, but a metabolic and hormonal one that happens to show up in the ovaries too. Code, models and file names in this repo mostly use "PMOS"; think of it as the same condition under a name that's trying to describe it more honestly.
 
-## Running it
+## The problem
 
-```bash
-# Dashboard
-venv/bin/streamlit run app.py
+PCOS/PMOS is genuinely hard to pin down. It doesn't announce itself with one clean symptom — it shows up as a *pattern*: a cycle that's a bit irregular, a hormone slightly outside range, some weight gain, some acne, follicle counts on an ultrasound that could mean something or could mean nothing on their own. No single test settles it. A clinician has to weigh the whole picture, and two clinicians looking at the same chart don't always land in the same place.
 
-# Retrain the diagnosis and risk-scoring halves of the pipeline.
-# Writes to artifacts/retrained/ and leaves the shipped pickles alone.
-venv/bin/python -m src.pipeline.train_pipeline
+That's exactly the kind of problem a model is good at — not replacing the clinician's judgment, but doing the pattern-matching across dozens of features at once, and being explicit about *why* it landed where it did. And a "yes, PMOS" answer isn't the end of the story either. One patient with PMOS is mainly facing a metabolic risk down the road; another is mainly worried about fertility; another is carrying the psychological weight of visible symptoms nobody's addressing. Treating all of them the same misses most of what actually matters for what she should do next.
 
-# Same, but replace artifacts/ in place
-venv/bin/python -m src.pipeline.train_pipeline --overwrite
+So this project isn't just "does she have it." It's: does she have it, what specifically does that put at risk, why does the model think so, and what's a reasonable next step to raise with a doctor.
 
-# Sanity check inference against the shipped artifacts
-venv/bin/python -m src.pipeline.predict_pipeline
+## What it actually does
 
-# Notebooks
-venv/bin/jupyter lab
-```
+| Capability | What it answers |
+|---|---|
+| PMOS diagnosis | How likely is this patient to be PMOS positive? |
+| Subtype exploration | Do PMOS patients cluster into distinct types, or is it more of a spectrum? |
+| Risk scoring (×4) | Of metabolic, cardiovascular, reproductive and psychological risk, which ones does this profile actually put at stake? |
+| Explainability | Which specific features pushed the diagnosis probability up or down? |
+| Recommendations | Given the risk profile, what's worth raising with a doctor? |
+| Ultrasound classification | Does this ovarian ultrasound look normal, PCO, or dominant-follicle? |
 
-The checked-in `venv/` is Python 3.11 with scikit-learn 1.9, xgboost 3.2,
-shap 0.51 and streamlit 1.61. Use `venv/bin/python` rather than a bare
-`python3` — the pickles in `artifacts/` were written with these versions and
-unpickling under a different sklearn or xgboost major can fail.
+All served through one Streamlit dashboard — you fill in a form, not a spreadsheet.
+
+## The data problem nobody mentions
+
+Before any of the modeling happened, there was a quieter decision that mattered just as much: which dataset to actually trust. A few didn't make the cut, and it's worth saying why, because "we found more data" isn't automatically good news.
+
+- **A synthetic dataset (PCOSGen) was rejected outright.** Generated data can look clean and still teach a model patterns that don't exist in real patients.
+- **A 5-class Kaggle dataset was rejected** after turning up 2,284 exact duplicate images — about a third of the dataset was the same pictures counted twice. Training on that would have meant the model's reported accuracy was partly just memorizing repeats.
+- **A binary ultrasound dataset was rejected** because a model hit AUC = 1.0 by epoch one. Perfect scores that arrive instantly are almost never a sign of a great model — they're a sign the task was accidentally made trivial (often because of near-duplicate images leaking between train and test).
+
+None of these are exciting rejections. They're the unglamorous, unpaid work of not fooling yourself before you even start training — and they're a big part of why the numbers below are trustworthy rather than just impressive-looking.
 
 ## How it fits together
 
-`artifacts/` is the interface between training and serving. Nothing revalidates
-it at load time, so changing a feature list or a model in one place silently
-invalidates everything downstream.
+```
+Excel workbook (541 patients)
+    |
+Data ingestion -> cleaned CSV
+    |
+Feature selection -- chi2 / ANOVA / mutual information (diagnostic only),
+                      then LassoCV on standardized features, then a VIF prune
+    |
+Class balancing -- SMOTETomek, training half only
+    |
+Diagnosis models -- Logistic Regression / Random Forest / SVM / XGBoost /
+                     soft-voting ensemble
+    |
+Risk scoring -- 4 rule-derived labels, each learned by XGBoost with
+                cross-validated out-of-sample predictions
+    |
+Clustering -- exploring whether PMOS patients form distinct subtypes
+    |
+SHAP explainer + recommendation engine
+    |
+(separate track) Ovarian ultrasounds -> MobileNetV2 CNN -> follicle classification
+    |
+Streamlit app -- Input -> Diagnosis -> Risk Dashboard -> Recommendations -> SHAP
+```
 
-**Ported to `src/`** — ingestion, transformation, the five classifiers and risk
-scoring. A full run reproduces the shipped 13-feature list, the shipped
-Logistic Regression, and all four `risk_model_*.pkl` files exactly (verified
-bit-identical to the pickles shipped in `artifacts/`).
+Same modular philosophy throughout: ingestion, feature engineering, model training and risk scoring each live in their own file under `src/components/`. The app itself contains zero model code — it only ever calls into a serving-side pipeline that has zero Streamlit code. Swap the front end out entirely and the models underneath don't need to change.
 
-**Still notebook-only** — the CNN (Block 4), clustering (Block 5), the SHAP explainer (Block 7)
-and the recommendation engine (Block 8). Their artifacts are loaded by the
-dashboard but are not regenerated by `train_pipeline`.
+## Choosing honesty over a better-looking number
 
-### Three feature lists, not one
+A pattern runs through this project: several places where the "correct" answer looks worse on paper than the alternative, and the alternative was rejected anyway.
 
-| List | Count | Used by |
-|---|---|---|
-| `final_features` | 13 | diagnosis model, SHAP explainer |
-| `risk_features` | 12 | Metabolic, CVD and Psych risk — drops `Marraige Status (Yrs)` |
-| `repro_features` | 10 | Reproductive risk — additionally drops `AMH(ng/mL)` and `Cycle(R/I)` |
+- **Reproductive Risk's AUC is the lowest of the four risk models (0.71 vs. 0.90–0.98 elsewhere) — on purpose.** Its label is partly defined by AMH and cycle regularity, so those two features were removed from what the model is allowed to see. Leaving them in would have pushed the score higher by letting the model read its own answer key. The lower number is the honest one.
+- **PMOS subtypes are reported as a continuum, not discrete clusters.** The clustering analysis was run in good faith looking for distinct patient subtypes; the honest finding was that patients spread out more than they cleanly separate. Reporting "three clean subtypes" would have been a more exciting slide and a less true one.
+- **The CNN's 80.4% accuracy is reported next to a published benchmark (76.2%), with the comparison flagged as approximate** — different studies split and preprocess their data differently, so a few points of difference shouldn't be read as "definitively better."
+- **Marriage duration is a real model feature, but it's hidden from the SHAP explanation chart.** The dashboard has no sensible question to ask for it, so it's sent as a fixed placeholder — showing its "contribution" to a specific patient's prediction would be showing noise, not signal.
+- **Pregnancy status was dropped as an input entirely.** It's a downstream consequence of PMOS-related fertility issues, not a cause — including it as a predictor would have let the model quietly cheat off an outcome instead of learning the underlying pattern.
 
-The two extra drops for reproductive risk are deliberate: both feed the rule
-that defines the `Reproductive_Risk` label, so including them would let the
-model read its own answer. Its AUC (~0.70) is lower than the others *on
-purpose* — putting them back inflates the score without improving the model.
+None of this is about being modest for its own sake. A model that hides its own weak spots is a model you can't trust anywhere, including in the places it's actually strong.
 
-### Column names are dirty on purpose
+## Results
 
-The source workbook has inconsistent spacing that survives into the feature
-lists. `'I   beta-HCG(mIU/mL)'` has three internal spaces,
-`'Skin darkening (Y/N)'` has a space before the paren, and
-`'Marraige Status (Yrs)'` is misspelled. `PatientData.to_dict` reproduces them
-exactly; change one and the `df[features]` lookup raises `KeyError`.
+### PMOS diagnosis
 
-### Known gaps
+| Model | Accuracy | F1 | ROC-AUC | Recall (PMOS+) |
+|---|---|---|---|---|
+| SVM | 0.8899 | 0.8378 | 0.9587 | 0.8611 |
+| Random Forest | 0.9174 | 0.8732 | 0.9585 | 0.8611 |
+| XGBoost | 0.9266 | 0.8857 | 0.9650 | 0.8611 |
+| Voting Ensemble | 0.9266 | 0.8889 | 0.9684 | 0.8889 |
+| **Logistic Regression** | 0.9174 | 0.8800 | 0.9654 | **0.9167** ✅ |
 
-- **Block 6's save cell is empty** in the notebook as committed, so the
-  `risk_model_*.pkl`, `risk_features.pkl`, `repro_features.pkl` and
-  `patient_risk_scores.csv` files in `artifacts/` couldn't be regenerated from
-  the notebooks alone. `src/components/risk_scoring.py` now closes that gap —
-  same four rules, same feature drops, same cross-validated scoring, plus the
-  save step the notebook was missing.
-- **`best_model.pkl` is byte-identical to `model_lr.pkl`** but no notebook cell
-  writes it. `ModelTrainer` now does, selecting on PMOS+ recall.
-- **TensorFlow is not in `requirements.txt`.** The ultrasound CNN is optional;
-  `PredictPipeline.cnn` returns `None` when the import fails and the ultrasound
-  tab degrades to "no classification". See the note in `requirements.txt`.
-- **`notebook/Block4_CNN.ipynb` can't be run as committed.** It trains the
-  MobileNetV2 classifier behind `pmos_cnn_final.keras`, but the 304-image
-  ultrasound set it trains on was never committed to this repo. Place the
-  three class folders under `notebook/data/ovarian_ultrasound_dataset/` to
-  run it; re-running it overwrites the shipped `.keras` file and, since
-  fine-tuning and augmentation aren't fully seeded, won't reproduce it
-  bit-for-bit the way the other ported blocks do.
-- **Notebooks hardcode an absolute `os.chdir`.** Moving the repo means editing
-  that line in every block. Code under `src/` resolves paths from the package
-  location instead and is unaffected.
+**Why Logistic Regression, when the ensemble beats it on almost every other number?** Because in a screening tool, a missed positive costs more than a false alarm. A patient waved through as "probably fine" doesn't get the follow-up she needs; a patient flagged unnecessarily just has a conversation with her doctor that turns out reassuring. Logistic Regression catches 91.7% of true PMOS-positive patients against the ensemble's 88.9% — three more out of every hundred who don't slip through. That's the number worth protecting, even at a small cost elsewhere.
+
+### Risk scoring (cross-validated, out-of-sample)
+
+| Dimension | CV AUC | F1 | Accuracy |
+|---|---|---|---|
+| Metabolic Risk | 0.9066 | 0.8395 | 0.8466 |
+| CVD Risk | 0.8991 | 0.5549 | 0.8577 |
+| **Reproductive Risk** | **0.7055** | 0.6571 | 0.6470 |
+| Psychological Risk | 0.9773 | 0.8564 | 0.9039 |
+
+### Ultrasound classification
+
+MobileNetV2, transfer-learned in two phases (frozen feature extraction, then fine-tuning the last 30 layers) on 304 images across three classes — Normal, PCO, Dominant Follicle.
+
+- **Accuracy:** 80.4%
+- **Macro AUC:** 0.9298
+- Compared cautiously against a published ResNet18 benchmark of 76.2% accuracy on a similar task.
+
+These numbers are as recorded from the original training run; the image set itself isn't part of this repo, so the run hasn't been reproduced locally.
+
+## Tech stack
+
+| Category | Tools |
+|---|---|
+| Language | Python 3.11 |
+| Data processing | pandas, NumPy |
+| Feature selection | scikit-learn (LassoCV, chi2, ANOVA, mutual information), statsmodels (VIF) |
+| Class balancing | imbalanced-learn (SMOTETomek) |
+| Machine learning | scikit-learn (LR, RF, SVM), XGBoost, soft-voting ensembles |
+| Explainability | SHAP (TreeExplainer) |
+| Deep learning | TensorFlow / Keras, MobileNetV2 transfer learning (ultrasound track only) |
+| Web app | Streamlit |
+| Serialization | pickle |
+| Version control | Git & GitHub |
+
+## Run it yourself
+
+```bash
+# Dashboard — run from the repo root, src/ must be importable
+venv/bin/streamlit run app.py
+
+# Retrain the diagnosis + risk-scoring models against the raw data.
+# Writes to artifacts/retrained/ by default and never touches the shipped models.
+venv/bin/python -m src.pipeline.train_pipeline
+venv/bin/python -m src.pipeline.train_pipeline --overwrite   # replace the shipped ones in place
+
+# Quick sanity check against the shipped artifacts
+venv/bin/python -m src.pipeline.predict_pipeline
+
+# The exploratory notebooks
+venv/bin/jupyter lab
+```
+
+A full training run reproduces the shipped diagnosis models and all four risk models bit-for-bit — verified by checksum, not just "it ran without errors."
+
+## Where this could go next
+
+- **Make the ultrasound track fully reproducible.** The CNN notebook exists, but its training images aren't in this repo. Committing them (or documenting how to source them) and adding TensorFlow to the deployment requirements would let the live dashboard actually classify ultrasounds instead of quietly showing "no classification."
+- **Finish porting the notebook-only stages.** Clustering, the SHAP explainer and the recommendation engine still live only in notebooks. Diagnosis and risk scoring already made the jump to runnable, reproducible code — extending that to the rest would mean the entire platform, not just half of it, can be rebuilt from raw data on demand.
+- **Validate the risk labels against real outcomes.** They're honestly derived given what's available, but they're still clinical rules standing in for ground truth. If longitudinal outcome data ever became available, checking these labels against what actually happened to real patients would be the real test of whether they hold up.
+
+## Author
+
+**Ananya Singh**
+MSc Statistics and Computing (Machine Learning)
+GitHub: [@annnx7172-cell](https://github.com/annnx7172-cell)
