@@ -42,6 +42,16 @@ Before any of the modeling happened, there was a quieter decision that mattered 
 
 None of these are exciting rejections. They're the unglamorous, unpaid work of not fooling yourself before you even start training — and they're a big part of why the numbers below are trustworthy rather than just impressive-looking.
 
+## Datasets
+
+- **Tabular clinical data (541 patients, 45 features):**  
+  https://www.kaggle.com/prasoonkottarathil/polycystic-ovary-syndrome-pcos  
+  Collected from 10 hospitals in Kerala, India.
+
+- **Ovarian ultrasound images (Normal / PCO / Dominant Follicle):**  
+  https://github.com/HananSaadat/ovarian_ultrasound_dataset  
+  Introduced in Borna et al. (2025), *Frontiers in Physiology*, DOI: 10.3389/fphys.2025.1520898.
+
 ## How it fits together
 
 ```
